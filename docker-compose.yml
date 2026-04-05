@@ -1,0 +1,162 @@
+services:
+  mariadb:
+    image: mariadb:10.11
+    container_name: stelvis-mariadb
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: stelvis2024
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - stelvis-network
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-pstelvis2024"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-cache:
+    image: redis:7-alpine
+    container_name: stelvis-redis-cache
+    restart: unless-stopped
+    networks:
+      - stelvis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-queue:
+    image: redis:7-alpine
+    container_name: stelvis-redis-queue
+    restart: unless-stopped
+    networks:
+      - stelvis-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # This runs ONCE on first start - writes config and creates the site
+  configurator:
+    image: frappe/erpnext:v15
+    container_name: stelvis-configurator
+    restart: "no"
+    entrypoint: ["bash", "/home/frappe/init.sh"]
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+      - ./init.sh:/home/frappe/init.sh:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+    networks:
+      - stelvis-network
+
+  erpnext:
+    image: frappe/erpnext:v15
+    container_name: stelvis-erpnext
+    restart: unless-stopped
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+  erpnext-worker-short:
+    image: frappe/erpnext:v15
+    container_name: stelvis-worker-short
+    restart: unless-stopped
+    command: bench worker --queue short
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+  erpnext-worker-long:
+    image: frappe/erpnext:v15
+    container_name: stelvis-worker-long
+    restart: unless-stopped
+    command: bench worker --queue long
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+  erpnext-worker-default:
+    image: frappe/erpnext:v15
+    container_name: stelvis-worker-default
+    restart: unless-stopped
+    command: bench worker --queue default
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+  erpnext-scheduler:
+    image: frappe/erpnext:v15
+    container_name: stelvis-scheduler
+    restart: unless-stopped
+    command: bench schedule
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+  nginx:
+    image: frappe/erpnext:v15
+    container_name: stelvis-nginx
+    restart: unless-stopped
+    command: nginx-entrypoint.sh
+    environment:
+      BACKEND: erpnext:8000
+      SOCKETIO: erpnext:9000
+      FRAPPE_SITE_NAME_HEADER: stelvis.local
+    volumes:
+      - sites-data:/home/frappe/frappe-bench/sites
+    ports:
+      - "80:8080"
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+    networks:
+      - stelvis-network
+
+volumes:
+  mariadb-data:
+  sites-data:
+  logs:
+
+networks:
+  stelvis-network:
+    name: stelvis-network
