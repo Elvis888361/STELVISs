@@ -1,22 +1,25 @@
 @echo off
 REM ============================================
 REM Stelvis ERPNext - ONE CLICK INSTALLER
-REM Right-click > Run as administrator
+REM Just double-click this file!
 REM ============================================
 
+REM Auto-elevate to administrator
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Requesting administrator access...
+    PowerShell -Command "Start-Process '%~f0' -Verb RunAs -ArgumentList '%~dp0'"
+    exit /b
+)
+
+REM Set working directory to script location
+cd /d "%~dp0"
+
+echo.
 echo ============================================
 echo   STELVIS ERPNext - Installer
 echo ============================================
 echo.
-
-REM Check for admin rights
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    echo ERROR: Right-click this file and select
-    echo "Run as administrator"
-    pause
-    exit /b 1
-)
 
 REM Check if Docker is already installed and running
 docker info >nul 2>&1
@@ -67,10 +70,10 @@ echo ============================================
 echo.
 echo   After restart:
 echo   1. Wait for Docker whale icon in taskbar
-echo   2. Double-click INSTALL.bat again (as admin)
+echo   2. Double-click INSTALL.bat again
 echo   3. It will finish the setup automatically
 echo ============================================
-
+echo.
 set /p RESTART="Restart now? (Y/N): "
 if /i "%RESTART%"=="Y" shutdown /r /t 5
 pause
@@ -143,13 +146,13 @@ if "%EXIT_CODE%" neq "0" (
     exit /b 1
 )
 
-REM Wait a bit for nginx/erpnext to be ready
+REM Wait for nginx/erpnext to be ready
 echo   Almost done, starting web server...
 timeout /t 30 /nobreak >nul
 
 REM Create desktop shortcuts
 echo   Creating desktop shortcuts...
-PowerShell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Stelvis POS.lnk'); $s.TargetPath = 'http://stelvis.local'; $s.Save()"
+PowerShell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Stelvis POS.lnk'); $s.TargetPath = 'http://localhost'; $s.Save()"
 PowerShell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Stelvis Start.lnk'); $s.TargetPath = '%~dp0start.bat'; $s.WorkingDirectory = '%~dp0'; $s.Save()"
 PowerShell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Stelvis Backup.lnk'); $s.TargetPath = '%~dp0backup.bat'; $s.WorkingDirectory = '%~dp0'; $s.Save()"
 
@@ -160,14 +163,15 @@ echo ============================================
 echo.
 echo   Opening browser now...
 echo.
-echo   URL:      http://stelvis.local
+echo   URL:      http://localhost
+echo   Backup:   http://localhost:8080 (if port 80 is busy)
 echo   Username: Administrator
 echo   Password: admin2024
 echo.
 echo   CHANGE THE PASSWORD AFTER FIRST LOGIN!
 echo.
-echo   POS: http://stelvis.local/app/point-of-sale
+echo   POS: http://localhost/app/point-of-sale
 echo ============================================
 
-start http://stelvis.local
+start http://localhost
 pause

@@ -15,9 +15,15 @@ echo ERPNext is starting up. Please wait about 30 seconds...
 timeout /t 30 /nobreak >nul
 
 echo Opening browser...
-start http://stelvis.local
+start http://localhost
 
 echo.
-echo ERPNext is running! You can close this window.
-echo To stop ERPNext, double-click stop.bat
+echo ============================================
+echo   ERPNext is running!
+echo.
+echo   If http://localhost doesn't work, try:
+echo   http://localhost:8080
+echo.
+echo   To stop: double-click stop.bat
+echo ============================================
 pause

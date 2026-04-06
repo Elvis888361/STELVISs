@@ -146,6 +146,7 @@ services:
       - sites-data:/home/frappe/frappe-bench/sites
     ports:
       - "80:8080"
+      - "8080:8080"
     depends_on:
       configurator:
         condition: service_completed_successfully
