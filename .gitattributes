@@ -1,0 +1,3 @@
+# Force shell scripts to keep Unix line endings (LF)
+# This is critical - Docker Linux containers break with Windows CRLF
+*.sh text eol=lf

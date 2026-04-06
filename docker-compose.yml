@@ -44,16 +44,43 @@ services:
       timeout: 3s
       retries: 5
 
-  # This runs ONCE on first start - writes config and creates the site
   configurator:
     image: frappe/erpnext:v15
     container_name: stelvis-configurator
     restart: "no"
-    entrypoint: ["bash", "/home/frappe/init.sh"]
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -e
+        echo ">>> Waiting for services..."
+        sleep 10
+        echo ">>> Writing site config..."
+        printf '{\n  "db_host": "mariadb",\n  "db_port": 3306,\n  "redis_cache": "redis://redis-cache:6379",\n  "redis_queue": "redis://redis-queue:6379",\n  "redis_socketio": "redis://redis-queue:6379",\n  "socketio_port": 9000\n}\n' > /home/frappe/frappe-bench/sites/common_site_config.json
+        SITE_DIR="/home/frappe/frappe-bench/sites/stelvis.local/site_config.json"
+        if [ -f "$$SITE_DIR" ]; then
+          echo ">>> Site already exists. Skipping creation."
+        else
+          echo ">>> Creating site stelvis.local..."
+          echo ">>> This takes 5-10 minutes on first run. Please wait..."
+          bench new-site stelvis.local --mariadb-root-password stelvis2024 --admin-password admin2024 --install-app erpnext --set-default
+          bench --site stelvis.local set-config developer_mode 0
+          bench --site stelvis.local set-config server_script_enabled 1
+          bench --site stelvis.local scheduler enable
+          echo ">>> Fixing database access..."
+          DB_USER=$$(python3 -c "import json; print(json.load(open('$$SITE_DIR'))['db_name'])")
+          if [ -n "$$DB_USER" ]; then
+            CURRENT_HOST=$$(mysql -h mariadb -uroot -pstelvis2024 -N -e "SELECT Host FROM mysql.global_priv WHERE User='$$DB_USER' LIMIT 1;" 2>/dev/null)
+            if [ -n "$$CURRENT_HOST" ] && [ "$$CURRENT_HOST" != "%" ]; then
+              mysql -h mariadb -uroot -pstelvis2024 -e "RENAME USER '$$DB_USER'@'$$CURRENT_HOST' TO '$$DB_USER'@'%'; FLUSH PRIVILEGES;" 2>/dev/null || true
+            fi
+            echo ">>> Database access fixed."
+          fi
+          echo ">>> Site created successfully!"
+        fi
+        echo ">>> Done! ERPNext is ready."
     volumes:
       - sites-data:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
-      - ./init.sh:/home/frappe/init.sh:ro
     depends_on:
       mariadb:
         condition: service_healthy
